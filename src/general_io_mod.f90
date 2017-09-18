@@ -1,6 +1,7 @@
-!! Copyright (C) 2013-2015 Paulo V. C. Medeiros
+!! Copyright (C) 2013-2017 Paulo V. C. Medeiros
 !!
-!! This file is part of BandUP: Band Unfolding code for Plane-wave based calculations.
+!! This file is part of BandUP:
+!! Band Unfolding code for Plane-wave based calculations.
 !!
 !! BandUP is free software: you can redistribute it and/or modify
 !! it under the terms of the GNU General Public License as published by
@@ -15,7 +16,7 @@
 !! You should have received a copy of the GNU General Public License
 !! along with BandUP.  If not, see <http://www.gnu.org/licenses/>.
 
-!===============================================================================
+!==============================================================================
 ! MODULE: general_io
 !
 !> @author
@@ -23,35 +24,153 @@
 !
 ! DESCRIPTION: 
 !> Provides routines and constants to perform general I/O.
-!===============================================================================
+!==============================================================================
 
 module general_io
 use constants_and_types
-use math
 implicit none
 SAVE
 PRIVATE
-PUBLIC :: available_io_unit, file_extension, filename_without_extension, get_file_size_in_bytes, & 
-          str_len, package_version, file_header_BandUP, file_header_BandUP_short, &
-          file_for_pc_reduced_to_prim_cell, file_for_SC_reduced_to_prim_cell
+PUBLIC :: available_io_unit, file_extension, filename_without_extension, &
+          get_file_size_in_bytes, str_len, file_header_BandUP, &
+          file_for_pc_reduced_to_prim_cell, file_for_SC_reduced_to_prim_cell, &
+          compiler_version, compilation_time, get_git_info_compiled_files, &
+          timestamp
 
-integer, parameter :: str_len=256
-character(len=30), parameter :: package_version="2.6.0 (BETA), 2015-03-18"
-character(len=str_len), parameter :: file_header_BandUP="# File created by BandUP - &
-                                                         Band Unfolding code for &
-                                                         Plane-wave based calculations, &
-                                                         V"//trim(adjustl(package_version)), &
-                                     file_header_BandUP_short="# File created by BandUP, &
-                                                               V"//trim(adjustl(package_version)),&
-                                     file_for_pc_reduced_to_prim_cell="BandUP_suggestion_of_pc_&
-                                                                       for_your_reference_unit_&
-                                                                       cell.POSCAR", &
-                                     file_for_SC_reduced_to_prim_cell="BandUP_suggestion_of_&
-                                                                       smaller_SC_based_on_your_&
-                                                                       input_SC.POSCAR"
+character(len=str_len), parameter :: &
+    file_for_pc_reduced_to_prim_cell=&
+        "BandUP_suggestion_of_pc_for_your_reference_unit_cell.POSCAR", &
+    file_for_SC_reduced_to_prim_cell=&
+        "BandUP_suggestion_of_smaller_SC_based_on_your_input_SC.POSCAR"
 
 !! Functions and subroutines
 CONTAINS 
+
+function file_header_BandUP() result(header)
+implicit none
+character(len=:), allocatable :: header
+
+    header = "# File created by BandUP (" // &
+             trim(adjustl(package_version)) // ') at ' // &
+             timestamp()
+
+end function file_header_BandUP
+
+
+function compiler_version() result(compiler_info_string)
+implicit none
+character(len=127) :: compiler_info_string
+integer :: compiler_major, compiler_minor, compiler_patch, &
+           compiler_release, compiler_build
+
+#ifdef __INTEL_COMPILER
+    write(compiler_info_string, '(A,I0)') 'Intel Fortran (ifort) V', &
+                                          __INTEL_COMPILER
+#elif defined __GFORTRAN__
+    compiler_major = __GNUC__
+    compiler_minor = __GNUC_MINOR__
+    compiler_patch = __GNUC_PATCHLEVEL__
+    write(compiler_info_string, '(A,2(I0,A),I0)') 'GNU Fortran (gfortran) V', &
+        compiler_major,'.',compiler_minor,'.',compiler_patch
+#elif defined NAGFOR
+    compiler_release = 0
+    compiler_build = 0
+#   if defined __NAG_COMPILER_RELEASE
+        compiler_release = __NAG_COMPILER_RELEASE
+#   endif
+#   if defined __NAG_COMPILER_BUILD
+        compiler_build = __NAG_COMPILER_BUILD
+#   endif
+    write(compiler_info_string, '(2(A,I0))') 'NAG Fortran Release ', &
+                                             compiler_release, &
+                                             " Build ", &
+                                             compiler_build
+#else
+    compiler_info_string='Unknown Compiler'
+#endif
+
+end function compiler_version
+
+function compilation_time() result(timestamp)
+implicit none
+character(len=30) :: timestamp
+
+#if defined (__INTEL_COMPILER) && defined (__TIMESTAMP__)
+    write(timestamp, '(A)') __TIMESTAMP__
+#elif defined (__GFORTRAN__) && defined (__DATE__) && defined (__TIME__)
+    write(timestamp, '(A,X,A)') __DATE__, __TIME__
+#elif defined __BUILD_START_TIME__
+    write(timestamp, '(A)') __BUILD_START_TIME__
+#else
+    timestamp = 'unknown date and time'
+#endif
+
+end function compilation_time
+
+function get_git_info_compiled_files(requested_info) result(req_info_val)
+implicit none
+character(len=*), intent(in) :: requested_info
+character(len=127) :: req_info_val
+
+    select case (trim(adjustl(requested_info)))
+        case ('hash_latest_commit')
+#           if defined (__COMMIT_HASH__)
+                write(req_info_val, '(A)') __COMMIT_HASH__
+#           else
+                req_info_val = '(unknown hash from latest git commit)'
+#           endif
+        case ('branch_name')
+#           if defined (__USED_BRANCH__)
+                write(req_info_val, '(A)') __USED_BRANCH__
+#           else
+                req_info_val = 'unknown branch'
+#           endif
+        case default
+            req_info_val = ''
+    end select
+
+end function get_git_info_compiled_files
+
+
+function str_month(imonth) result(rtn)
+implicit none
+character(len=:), allocatable :: rtn
+integer, intent(in) :: imonth
+character(len=3), dimension(12) :: month_int2str
+
+    month_int2str = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', &
+                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    select case (imonth)
+        case(1:12)
+            rtn = month_int2str(imonth)
+        case default
+            rtn = 'ERR'
+    end select
+
+end function str_month
+
+function timestamp() result(str_time)
+implicit none
+character(len=:), allocatable :: str_time
+character(len=8) :: date
+character(len=10) :: time
+character(len=5) :: zone
+integer, dimension(1:8) :: values
+integer :: year, day, hour, minute
+character(len=127) :: fmt_str, temp_str
+
+    call date_and_time(date, time, zone, values)
+    year = values(1)
+    day = values(3)
+    hour = values(5)
+    minute = values(6)
+    fmt_str = "(I0,':',I0.2,X,'UTC',A,X,'on',X,A,X,I0.2,',',X,I4)"
+    write(temp_str, trim(fmt_str)) &
+        hour, minute, zone, str_month(values(2)), day, year
+    str_time = trim(adjustl(temp_str))
+
+end function timestamp
+
 
 function available_io_unit(min_unit,max_unit) result(unit_num)
 ! Returns a number unit_num which can be safely used in statements like
@@ -135,7 +254,7 @@ end function filename_without_extension
 
 subroutine get_file_size_in_bytes(file_size, file)
 implicit none
-integer(8), intent(out) :: file_size
+integer(kind=long_int_kind), intent(out) :: file_size
 character(len=*), intent(in) :: file
 logical :: file_exists
 
